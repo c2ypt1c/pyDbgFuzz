@@ -6,8 +6,9 @@ from crash_binning import *
 
 import threading
 import subprocess
+import time
 
-log_file = "C:\\crash.log"
+crash_dir = "C:\\crashdir\\"
 use_gflags = True
 gflags_path = "C:\\Program Files\\Windows Kits\\8.1\\Debuggers\\x86\\gflags.exe"
 
@@ -32,26 +33,43 @@ class pyDbgFuzz:
         cmd = "%s /p /disable %s /full" % (gflags_path, self.target_exe)
         subprocess.call(cmd)
 
+    def close_fault_win(self):
+        tasklist = subprocess.check_output("tasklist")
+
+        fault_win = "WerFault.exe"
+        if fault_win in tasklist:
+            subprocess.call("taskkill /t /f /im %s" % fault_win)
+
+    def kill_proc(self, timeout):
+        time.sleep(timeout)
+        self.close_fault_win()
+        subprocess.call("taskkill /t /f /im %s" % self.exe)
+        time.sleep(0.2)
+
     def kill_python(self):
         subprocess.call("taskkill /t /f /im python.exe")
 
-    def bp_handler(self):
-        if self.dbg.first_breakpoint:
-            self.dbg.hide_debugger
+    def create_backup(self, timestamp):
+            fin = open(self.fuzz_file, 'rb')
+            fout = open("%s%s_poc.bak" % (crash_dir, timestamp), 'wb')
+            fout.write(fin.read())
+            fin.close()
+            fout.close()
 
-        return DBG_CONTINUE
-
-    def av_handler(self):
-        if self.dbg.dbg.u.Exception.dwFirstChance:
-            return EXCEPTION_NOT_HANDLED
+    def av_handler(self, dbg):
+        if dbg.dbg.u.Exception.dwFirstChance:
+            return DBG_EXCEPTION_NOT_HANDLED
 
         print "[!] ACCESS VIOLATION"
 
-        self.crash_bin = crash_binning()
-        self.crash_bin.record_crash(self.dbg)
+        timestamp = time.strftime("%m%d_%H-%M-%S", time.localtime())
+        self.create_backup(timestamp)
 
-        f = open(log_file, 'w')
-        f.write(self.crash_bin.crash_synopsis())
+        crash_bin = crash_binning()
+        crash_bin.record_crash(dbg)
+
+        f = open("%s%s_dbg.txt" % (crash_dir, timestamp), 'w')
+        f.write(crash_bin.crash_synopsis())
         f.close()
 
         if use_gflags:
@@ -61,7 +79,6 @@ class pyDbgFuzz:
 
     def fuzz(self):
         self.dbg = pydbg()
-        self.dbg.set_callback(EXCEPTION_BREAKPOINT, self.bp_handler)
         self.dbg.set_callback(EXCEPTION_ACCESS_VIOLATION, self.av_handler)
         self.dbg.load(self.target_exe, self.fuzz_file)
         self.dbg.run()
