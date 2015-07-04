@@ -17,8 +17,7 @@ while(1):
     # ...
     #
 
-    fuzzer = pydbg_fuzz(exe, file)
-    fuzzer.kill_proc(timeout)
+    pydbg_fuzz(exe, file, timeout)
 
 disable_gflags(exe)
 
