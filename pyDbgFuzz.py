@@ -9,7 +9,6 @@ import subprocess
 import time
 
 crash_dir = "C:\\crashdir\\"
-use_gflags = True
 gflags_path = "C:\\Program Files\\Windows Kits\\8.1\\Debuggers\\x86\\gflags.exe"
 
 class pyDbgFuzz:
@@ -19,20 +18,10 @@ class pyDbgFuzz:
 
         self.exe = target_exe[target_exe.rfind("\\")+1:]
 
-        if use_gflags:
-            self.enable_gflags()
-
         self.t = threading.Thread(target=self.fuzz)
         self.t.start()
 
-    def enable_gflags(self):
-        cmd = "%s /p /enable %s /full" % (gflags_path, self.exe)
-        subprocess.call(cmd)
-
-    def disable_gflags(self):
-        cmd = "%s /p /disable %s /full" % (gflags_path, self.target_exe)
-        subprocess.call(cmd)
-
+    
     def close_fault_win(self):
         tasklist = subprocess.check_output("tasklist")
 
@@ -75,10 +64,20 @@ class pyDbgFuzz:
         if use_gflags:
             self.disable_gflags()
 
-        self.kill_python()
+        #self.kill_python()
 
     def fuzz(self):
         self.dbg = pydbg()
         self.dbg.set_callback(EXCEPTION_ACCESS_VIOLATION, self.av_handler)
         self.dbg.load(self.target_exe, self.fuzz_file)
         self.dbg.run()
+
+# public funtions
+def enable_gflags(exe):
+    cmd = "%s /p /enable %s /full" % (gflags_path, exe)
+    subprocess.call(cmd)
+
+def disable_gflags(exe):
+    cmd = "%s /p /disable %s /full" % (gflags_path, exe)
+    subprocess.call(cmd)
+
