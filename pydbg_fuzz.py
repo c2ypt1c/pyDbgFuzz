@@ -5,6 +5,7 @@ from pydbg.defines import *
 from crash_binning import *
 
 import threading
+import multiprocessing
 import subprocess
 import time
 
@@ -12,15 +13,22 @@ crash_dir = "C:\\crashdir\\"
 gflags_path = "C:\\Program Files\\Windows Kits\\8.1\\Debuggers\\x86\\gflags.exe"
 
 class pydbg_fuzz:
-    def __init__(self, target_exe, fuzz_file=None):
+    def __init__(self, target_exe, fuzz_file=None, timeout=1):
         self.target_exe = target_exe
         self.fuzz_file = fuzz_file
 
         self.exe = target_exe[target_exe.rfind("\\")+1:]
 
+        # ensure that no existing processes are initially running
+        self.kill_proc()
+
         self.t = threading.Thread(target=self.fuzz)
         self.t.start()
+        self.timer = threading.Timer(timeout, self.kill_proc)
+        self.timer.start()
 
+        # wait until thread terminates
+        self.t.join()
     
     def close_fault_win(self):
         tasklist = subprocess.check_output("tasklist")
@@ -29,11 +37,9 @@ class pydbg_fuzz:
         if fault_win in tasklist:
             subprocess.call("taskkill /t /f /im %s" % fault_win)
 
-    def kill_proc(self, timeout):
-        time.sleep(timeout)
+    def kill_proc(self):
         self.close_fault_win()
-        subprocess.call("taskkill /t /f /im %s" % self.exe)
-        time.sleep(0.2)
+        subprocess.call("taskkill /t /f /im %s" % self.exe, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
     def kill_python(self):
         subprocess.call("taskkill /t /f /im python.exe")
@@ -49,6 +55,9 @@ class pydbg_fuzz:
         if dbg.dbg.u.Exception.dwFirstChance:
             return DBG_EXCEPTION_NOT_HANDLED
 
+        # cancel process termination timer
+        self.timer.cancel()
+
         print "[!] ACCESS VIOLATION"
 
         timestamp = time.strftime("%m%d_%H-%M-%S", time.localtime())
@@ -61,10 +70,8 @@ class pydbg_fuzz:
         f.write(crash_bin.crash_synopsis())
         f.close()
 
-        if use_gflags:
-            self.disable_gflags()
-
-        #self.kill_python()
+        # manually terminate process
+        self.kill_proc()
 
     def fuzz(self):
         self.dbg = pydbg()
@@ -80,4 +87,3 @@ def enable_gflags(exe):
 def disable_gflags(exe):
     cmd = "%s /p /disable %s /full" % (gflags_path, exe)
     subprocess.call(cmd)
-
