@@ -73,6 +73,9 @@ class pydbg_fuzz:
         # manually terminate process
         self.kill_proc()
 
+        # continue fuzzing
+        return DBG_CONTINUE
+
     def fuzz(self):
         self.dbg = pydbg()
         self.dbg.set_callback(EXCEPTION_ACCESS_VIOLATION, self.av_handler)
