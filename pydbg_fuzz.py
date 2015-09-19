@@ -5,56 +5,47 @@ from pydbg.defines import *
 from crash_binning import *
 
 import threading
-import multiprocessing
 import subprocess
 import time
 
-crash_dir = "C:\\crashdir\\"
-gflags_path = "C:\\Program Files\\Windows Kits\\8.1\\Debuggers\\x86\\gflags.exe"
+logdir = "C:\\crashbin\\"
+#gflags_path = "C:\\Program Files\\Windows Kits\\8.1\\Debuggers\\x86\\gflags.exe"
+# or place gflags in current directory
+gflags_path = "gflags.exe"
 
 class pydbg_fuzz:
     def __init__(self, target_exe, fuzz_file=None, timeout=1):
+
+        #FIXME: create log directory if it doesn't exist
+
         self.target_exe = target_exe
         self.fuzz_file = fuzz_file
 
         self.exe = target_exe[target_exe.rfind("\\")+1:]
 
-        # ensure that no existing processes are initially running
-        self.kill_proc()
-
         self.t = threading.Thread(target=self.fuzz)
         self.t.start()
+
         self.timer = threading.Timer(timeout, self.kill_proc)
         self.timer.start()
 
         # wait until thread terminates
         self.t.join()
     
-    def close_fault_win(self):
-        tasklist = subprocess.check_output("tasklist")
-
-        fault_win = "WerFault.exe"
-        if fault_win in tasklist:
-            subprocess.call("taskkill /t /f /im %s" % fault_win)
-
     def kill_proc(self):
-        self.close_fault_win()
-        subprocess.call("taskkill /t /f /im %s" % self.exe, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
-    def kill_python(self):
-        subprocess.call("taskkill /t /f /im python.exe")
+        self.timer.cancel()
+        self.dbg.terminate_process()
 
     def create_backup(self, timestamp):
-            fin = open(self.fuzz_file, 'rb')
-            fout = open("%s%s_poc.bak" % (crash_dir, timestamp), 'wb')
-            fout.write(fin.read())
-            fin.close()
-            fout.close()
+        #FIXME: create crash directory for each crash
+        # and write backups into it
+        fin = open(self.fuzz_file, 'rb')
+        fout = open("%s%s_poc.bak" % (logdir, timestamp), 'wb')
+        fout.write(fin.read())
+        fin.close()
+        fout.close()
 
     def av_handler(self, dbg):
-        if dbg.dbg.u.Exception.dwFirstChance:
-            return DBG_EXCEPTION_NOT_HANDLED
-
         # cancel process termination timer
         self.timer.cancel()
 
@@ -66,15 +57,20 @@ class pydbg_fuzz:
         crash_bin = crash_binning()
         crash_bin.record_crash(dbg)
 
-        f = open("%s%s_dbg.txt" % (crash_dir, timestamp), 'w')
+        f = open("%s%s_dbg.txt" % (logdir, timestamp), 'w')
         f.write(crash_bin.crash_synopsis())
         f.close()
 
-        # manually terminate process
         self.kill_proc()
 
-        # continue fuzzing
         return DBG_CONTINUE
+
+    #FIXME: if cntl-c detected, suspend dbg thread
+    #def suspend(self):
+        #self.dbg.suspend_all_threads()
+
+    #def resume(self):
+        #self.dbg.resume_all_threads()
 
     def fuzz(self):
         self.dbg = pydbg()
