@@ -4,6 +4,7 @@ from pydbg.defines import *
 # obtained from the paimei project: https://github.com/OpenRCE/paimei/blob/master/utils/crash_binning.py
 from crash_binning import *
 
+import os
 import threading
 import subprocess
 import time
@@ -44,10 +45,11 @@ class pydbg_fuzz:
     # Creates backup files when a crash occurs
     ###
     def create_backup(self, timestamp):
-        #FIXME: create crash directory for each crash
-        # and write backups into it
+        filename = self.opts.fuzzed_file
+        filename = filename[filename.rfind('\\')+1:]
+
         fin = open(self.opts.fuzzed_file, 'rb')
-        fout = open("%s%s_poc.bak" % (self.opts.log_dir, timestamp), 'wb')
+        fout = open("%s\\%s\\%s" % (self.opts.log_dir, timestamp, filename), 'wb')
         fout.write(fin.read())
         fin.close()
         fout.close()
@@ -61,13 +63,15 @@ class pydbg_fuzz:
 
         print "[!] ACCESS VIOLATION"
 
-        timestamp = time.strftime("%m%d_%H-%M-%S", time.localtime())
+        #timestamp = time.strftime("%m%d_%H-%M-%S", time.localtime())
+        timestamp = int(time.time()*1000)
+        os.makedirs("%s\\%s" % (self.opts.log_dir, timestamp))
         self.create_backup(timestamp)
 
         crash_bin = crash_binning()
         crash_bin.record_crash(dbg)
 
-        f = open("%s%s_dbg.txt" % (self.opts.log_dir, timestamp), 'w')
+        f = open("%s\\%s\\analysis.log" % (self.opts.log_dir, timestamp), 'w')
         f.write(crash_bin.crash_synopsis())
         f.close()
 
